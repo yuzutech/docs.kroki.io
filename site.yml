@@ -1,0 +1,20 @@
+runtime:
+  cache_dir: ./.cache/antora
+site:
+  title: Kroki Documentation
+  url: https://docs.kroki.io
+  start_page: kroki::index.adoc
+content:
+  sources:
+  - url: https://github.com/yuzutech/kroki
+    branches: HEAD
+    start_path: docs
+ui:
+  bundle:
+    url: https://gitlab.com/antora/antora-ui-default/-/jobs/artifacts/master/raw/build/ui-bundle.zip?job=bundle-stable
+    snapshot: true
+asciidoc:
+  attributes:
+    hide-uri-scheme: ''
+output:
+  dir: ./public
