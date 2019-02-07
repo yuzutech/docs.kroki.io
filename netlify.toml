@@ -1,21 +1,20 @@
 [build]
-  publish = "public"
-  command = "./netlify-build.sh"
+base = "netlify"
+publish = "public"
+command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull ../antora-playbook.yml"
 
 [build.environment]
-  NODE_VERSION = "8"
-  BUILD_ONLY = "true"
-  ANTORA_CACHE_DIR = ".cache/antora"
+NODE_VERSION = "10"
+ANTORA_CACHE_DIR = "node_modules/.cache/antora"
 
 [context.deploy-preview]
-  command = "URL=$DEPLOY_PRIME_URL ./netlify-build.sh"
+command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull --url $DEPLOY_PRIME_URL ../antora-playbook.yml"
 
 [[headers]]
-  for = "/*"
+for = "/_/font/*"
   [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-
-    Link = """
-    </_/stylesheets/main.min.css>; rel=preload; as=style, \
-    </_/images/main.jpg>; rel=preload; as=image"""
+  Cache-Control = "public,max-age=604800"
+for = "/*"
+  [headers.values]
+  X-Frame-Options = "DENY"
+  X-XSS-Protection = "1; mode=block"
