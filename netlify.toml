@@ -14,7 +14,3 @@ command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull -
 for = "/_/font/*"
   [headers.values]
   Cache-Control = "public,max-age=604800"
-for = "/*"
-  [headers.values]
-  X-Frame-Options = "DENY"
-  X-XSS-Protection = "1; mode=block"
