@@ -10,6 +10,11 @@ ANTORA_CACHE_DIR = "node_modules/.cache/antora"
 [context.deploy-preview]
 command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull --url $DEPLOY_PRIME_URL ../site.yml"
 
+[context.production.environment]
+ALGOLIA_APP_ID = "Z8A024I0F5"
+ALGOLIA_API_KEY = "1bd499249ebdef18e65f369e88597893"
+ALGOLIA_IDX_NAME = "kroki-docs"
+
 [[headers]]
 for = "/_/font/*"
   [headers.values]
