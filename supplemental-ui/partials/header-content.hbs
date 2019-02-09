@@ -1,0 +1,32 @@
+<header class="header" role="banner">
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <div class="navbar-item">
+        <a href="https://antora.org">Antora</a>
+        <span class="separator">//</span>
+        <a href="{{or site.url (or siteRootUrl siteRootPath)}}">Docs</a>
+      </div>
+      {{#if env.ALGOLIA_API_KEY}}
+      <div class="navbar-item">
+        <input id="search-input" type="text" placeholder="Search docs">
+      </div>
+      {{/if}}
+      <button class="navbar-burger" data-target="topbar-nav">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+    <div id="topbar-nav" class="navbar-menu">
+      <div class="navbar-end">
+        <div class="navbar-item has-dropdown is-hoverable">
+          <div class="navbar-link">Projects</div>
+          <div class="navbar-dropdown">
+            <a class="navbar-item" href="https://github.com/yuzutech/kroki">Repository</a>
+            <a class="navbar-item" href="https://github.com/yuzutech/kroki/issues">Issue Tracker</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+</header>
