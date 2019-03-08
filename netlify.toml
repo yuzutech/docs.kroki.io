@@ -1,14 +1,13 @@
 [build]
-base = "netlify"
 publish = "public"
-command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull ../site.yml"
+command = "./netlify-build.sh"
 
 [build.environment]
 NODE_VERSION = "10"
 ANTORA_CACHE_DIR = "node_modules/.cache/antora"
 
 [context.deploy-preview]
-command = "node_modules/.bin/antora --html-url-extension-style=indexify --pull --url $DEPLOY_PRIME_URL ../site.yml"
+command = "URL=$DEPLOY_PRIME_URL ./netlify-build.sh"
 
 [context.production.environment]
 ALGOLIA_APP_ID = "Z8A024I0F5"
