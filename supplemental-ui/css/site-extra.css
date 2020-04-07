@@ -199,10 +199,9 @@ code[class*="language-"]::selection, code[class*="language-"] ::selection {
 }
 
 .token.command {
-    color: white;
+    color: #363636;
     border-radius: 0.25rem;
     padding: 0.1rem 0.25rem;
-    background-color: #363636;
     font-weight: 600;
 }
 
