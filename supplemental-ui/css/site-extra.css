@@ -272,6 +272,8 @@ pre[data-line] {
     border: 1px solid #9b9693;
     background-color: #9b9693;
     color: white;
+    width: 1rem;
+    height: 1rem;
 }
 
 /* copy button */
