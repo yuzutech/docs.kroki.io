@@ -23,15 +23,11 @@ function resolveIncludeFile (target, page, cursor, catalog) {
   let resolved
   let family
   let relative
-  let placeholder
   if (RESOURCE_ID_DETECTOR_RX.test(target)) {
     // NOTE support legacy {partialsdir} and {examplesdir} prefixes (same as resource ID w/ only family and relative)
     if (target.startsWith(PARTIALS_DIR_TOKEN) || target.startsWith(EXAMPLES_DIR_TOKEN)) {
       ;[family, relative] = splitOnce(target, '$')
-      if (relative.charAt() === '/') {
-        relative = relative.substr(1)
-        placeholder = true
-      }
+      if (relative.charAt() === '/') relative = relative.substr(1)
       resolved = catalog.getById({
         component: ctx.component,
         version: ctx.version,
@@ -41,7 +37,7 @@ function resolveIncludeFile (target, page, cursor, catalog) {
       })
       // NOTE require family segment for now
     } else if (~target.indexOf('$')) {
-      resolved = catalog.resolveResource(target, selectResourceId(ctx))
+      resolved = catalog.resolveResource(target, extractResourceId(ctx))
     }
   } else {
     resolved = catalog.getByPath({
@@ -57,23 +53,15 @@ function resolveIncludeFile (target, page, cursor, catalog) {
       context: resolvedSrc,
       file: resolvedSrc.path,
       path: resolvedSrc.basename,
-      // NOTE src.contents is set if page is marked as a partial
-      // TODO if include file is a page, warn if not marked as a partial
-      contents: (resolvedSrc.contents || resolved.contents).toString(),
-    }
-  } else {
-    // FIXME use replace next line instead of pushing an include; maybe raise error
-    // TODO log "Unresolved include"
-    return {
-      context: cursor.dir.context,
-      file: cursor.file,
-      contents: `+include::${placeholder ? '{' + family + 'sdir}/' + relative : target}[]+`,
+      // NOTE src.contents holds AsciiDoc source for page marked as a partial
+      // QUESTION should we only use src.contents if family is 'page' and mediaType is 'text/asciidoc'?
+      contents: (resolvedSrc.contents || resolved.contents || '').toString(),
     }
   }
 }
 
-function selectResourceId ({ component, version, module, family, relative }) {
-  return { component, version, module, family, relative }
+function extractResourceId ({ component, version, module: module_, family, relative }) {
+  return { component, version, module: module_, family, relative }
 }
 
 module.exports = resolveIncludeFile

@@ -1,5 +1,4 @@
 'use strict'
-'use strict'
 
 // IMPORTANT eagerly load Opal to force the String encoding from UTF-16LE to UTF-8
 const Opal = require('opal-runtime').Opal
@@ -9,6 +8,7 @@ if ('encoding' in String.prototype && String(String.prototype.encoding) !== 'UTF
 
 const asciidoctor = require('asciidoctor.js')()
 const Extensions = asciidoctor.Extensions
+const convertImageRef = require('./image/convert-image-ref')
 const convertPageRef = require('./xref/convert-page-ref')
 const createConverter = require('./converter/create')
 const createExtensionRegistry = require('./create-extension-registry')
@@ -16,6 +16,8 @@ const ospath = require('path')
 const { posix: path } = ospath
 const resolveIncludeFile = require('./include/resolve-include-file')
 
+const BLANK_LINE_BUF = Buffer.from('\n\n')
+const DOCTITLE_MARKER_BUF = Buffer.from('= ')
 const DOT_RELATIVE_RX = new RegExp(`^\\.{1,2}[/${ospath.sep.replace('/', '').replace('\\', '\\\\')}]`)
 const { EXAMPLES_DIR_TOKEN, PARTIALS_DIR_TOKEN } = require('./constants')
 const EXTENSION_DSL_TYPES = Extensions.$constants(false).filter((name) => name.endsWith('Dsl'))
@@ -41,62 +43,74 @@ const EXTENSION_DSL_TYPES = Extensions.$constants(false).filter((name) => name.e
  * @returns {Document} An Asciidoctor Document object created from the source of the specified file.
  */
 function loadAsciiDoc (file, contentCatalog = undefined, config = {}) {
-  const fileSrc = file.src
-  const relative = fileSrc.relative
-  const extname = fileSrc.extname || relative.replace(/.*(?=\.)/g, '')
+  const { family, relative, extname = path.extname(relative) } = file.src
   const intrinsicAttrs = {
-    docname: relative.substr(0, relative.length - extname.length),
+    docname: (family === 'nav' ? 'nav$' : '') + relative.substr(0, relative.length - extname.length),
     docfile: file.path,
     // NOTE docdir implicitly sets base_dir on document; Opal only expands value to absolute path if it starts with ./
     docdir: file.dirname,
     docfilesuffix: extname,
+    // NOTE relfilesuffix must be set for page-to-page xrefs to work correctly
+    relfilesuffix: '.adoc',
     imagesdir: path.join(file.pub.moduleRootPath, '_images'),
     attachmentsdir: path.join(file.pub.moduleRootPath, '_attachments'),
     examplesdir: EXAMPLES_DIR_TOKEN,
     partialsdir: PARTIALS_DIR_TOKEN,
   }
-  const pageAttrs = fileSrc.family === 'page' ? computePageAttrs(fileSrc, contentCatalog) : {}
-  const attributes = Object.assign({}, config.attributes, intrinsicAttrs, pageAttrs)
-  const relativizePageRefs = config.relativizePageRefs !== false
-  // tag::override[]
-  let converter
-  if (typeof config.converter === 'function') {
-    converter = config.converter({
-      onPageRef: (refSpec, content) => convertPageRef(refSpec, content, file, contentCatalog, relativizePageRefs),
-    })
-  } else {
-    converter = createConverter({
-      onPageRef: (refSpec, content) => convertPageRef(refSpec, content, file, contentCatalog, relativizePageRefs),
-    })
-  }
-  // end::override[]
+  const attributes = family === 'page' ? { 'page-partial': '@' } : {}
+  Object.assign(attributes, config.attributes, intrinsicAttrs, computePageAttrs(file.src, contentCatalog))
   const extensionRegistry = createExtensionRegistry(asciidoctor, {
     onInclude: (doc, target, cursor) => resolveIncludeFile(target, file, cursor, contentCatalog),
   })
   const extensions = config.extensions || []
-  if (extensions.length) {
-    extensions.forEach((extension) => extension.register(extensionRegistry, { file, contentCatalog, config }))
+  if (extensions.length) extensions.forEach((ext) => ext.register(extensionRegistry, { file, contentCatalog, config }))
+  const opts = { attributes, extension_registry: extensionRegistry, safe: 'safe' }
+  if (config.doctype) opts.doctype = config.doctype
+  let contents = file.contents
+  if (config.headerOnly) {
+    opts.parse_header_only = true
+    const firstBlankLineIdx = contents.indexOf(BLANK_LINE_BUF)
+    if (~firstBlankLineIdx) {
+      const partialContents = contents.slice(0, firstBlankLineIdx)
+      const doctitleIdx = partialContents.indexOf(DOCTITLE_MARKER_BUF)
+      if (!doctitleIdx || partialContents[doctitleIdx - 1] === 10) contents = partialContents
+    }
+  } else {
+    const relativizePageRefs = config.relativizePageRefs !== false
+    // tag::override[]
+    let converter
+    if (typeof config.converter === 'function') {
+      converter = config.converter({
+        onImageRef: (resourceSpec) => convertImageRef(resourceSpec, file, contentCatalog),
+        onPageRef: (pageSpec, content) => convertPageRef(pageSpec, content, file, contentCatalog, relativizePageRefs),
+      })
+    } else {
+      converter = createConverter({
+        onImageRef: (resourceSpec) => convertImageRef(resourceSpec, file, contentCatalog),
+        onPageRef: (pageSpec, content) => convertPageRef(pageSpec, content, file, contentCatalog, relativizePageRefs),
+      })
+    }
+    opts.converter = converter
+    // end::override[]
   }
-  const doc = asciidoctor.load(file.contents.toString(), {
-    attributes,
-    converter,
-    extension_registry: extensionRegistry,
-    safe: 'safe',
-  })
+  const doc = asciidoctor.load(contents.toString(), opts)
   if (extensions.length) freeExtensions()
   return doc
 }
 
-function computePageAttrs (fileSrc, contentCatalog) {
+// QUESTION should we soft set the page-id attribute?
+function computePageAttrs ({ component: componentName, version, module: module_, relative, origin }, contentCatalog) {
   const attrs = {}
-  // QUESTION should we soft set the page-id attribute?
-  attrs['page-component-name'] = fileSrc.component
-  attrs['page-component-version'] = attrs['page-version'] = fileSrc.version
-  const component = contentCatalog && contentCatalog.getComponent(fileSrc.component)
-  if (component) attrs['page-component-title'] = component.title
-  attrs['page-module'] = fileSrc.module
-  attrs['page-relative'] = fileSrc.relative
-  const origin = fileSrc.origin
+  attrs['page-component-name'] = componentName
+  attrs['page-component-version'] = attrs['page-version'] = version
+  const component = contentCatalog && contentCatalog.getComponent(componentName)
+  if (component) {
+    const componentVersion = component.versions.find((it) => it.version === version)
+    if (componentVersion) attrs['page-component-display-version'] = componentVersion.displayVersion
+    attrs['page-component-title'] = component.title
+  }
+  attrs['page-module'] = module_
+  attrs['page-relative'] = attrs['page-relative-src-path'] = relative
   if (origin) {
     attrs['page-origin-type'] = origin.type
     attrs['page-origin-url'] = origin.url
@@ -104,13 +118,29 @@ function computePageAttrs (fileSrc, contentCatalog) {
     if (origin.branch) {
       attrs['page-origin-refname'] = attrs['page-origin-branch'] = origin.branch
       attrs['page-origin-reftype'] = 'branch'
-    } else if (origin.tag) {
+    } else {
       attrs['page-origin-refname'] = attrs['page-origin-tag'] = origin.tag
       attrs['page-origin-reftype'] = 'tag'
     }
-    if (origin.worktree) attrs['page-origin-worktree'] = ''
+    if (origin.worktree) {
+      attrs['page-origin-worktree'] = ''
+      attrs['page-origin-refhash'] = '(worktree)'
+    } else {
+      attrs['page-origin-refhash'] = origin.refhash
+    }
   }
   return attrs
+}
+
+function extractAsciiDocMetadata (doc) {
+  const metadata = { attributes: doc.getAttributes() }
+  if (doc.hasHeader()) {
+    const doctitle = (metadata.doctitle = doc.getDocumentTitle())
+    const xreftext = (metadata.xreftext = doc.$reftext().$to_s() || doctitle)
+    const navtitle = doc.getAttribute('navtitle')
+    metadata.navtitle = navtitle ? doc.$apply_reftext_subs(navtitle) : xreftext
+  }
+  return metadata
 }
 
 /**
@@ -156,10 +186,10 @@ function resolveConfig (playbook = {}) {
     const extensions = config.extensions.reduce((accum, extensionPath) => {
       if (extensionPath.charAt() === '.' && DOT_RELATIVE_RX.test(extensionPath)) {
         // NOTE require resolves a dot-relative path relative to current file; resolve relative to playbook dir instead
-        extensionPath = ospath.resolve(playbook.dir, extensionPath)
+        extensionPath = ospath.resolve(playbook.dir || '.', extensionPath)
       } else if (!ospath.isAbsolute(extensionPath)) {
         // NOTE appending node_modules prevents require from looking elsewhere before looking in these paths
-        const paths = [playbook.dir, ospath.dirname(__dirname)].map((start) => ospath.join(start, 'node_modules'))
+        const paths = [playbook.dir || '.', ospath.dirname(__dirname)].map((root) => ospath.join(root, 'node_modules'))
         extensionPath = require.resolve(extensionPath, { paths })
       }
       const extension = require(extensionPath)
@@ -193,5 +223,4 @@ function freeExtensions () {
   EXTENSION_DSL_TYPES.forEach((type) => (Opal.const_get_local(Extensions, type).$$iclasses.length = 0))
 }
 
-module.exports = loadAsciiDoc
-module.exports.resolveConfig = resolveConfig
+module.exports = Object.assign(loadAsciiDoc, { loadAsciiDoc, extractAsciiDocMetadata, resolveConfig })

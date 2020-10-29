@@ -1,21 +1,18 @@
 'use strict'
 
 const Opal = global.Opal
+const { $Antora } = require('../constants')
 
-const CIRCUMFIX_COMMENT_SUFFIX_RX = / (?:\*[/)]|--%?>)$/
+const DBL_COLON = '::'
+const DBL_SQUARE = '[]'
+
 const NEWLINE_RX = /\r\n?|\n/
-const TAG_DELIMITER_RX = /[,;]/
-const TAG_DIRECTIVE_RX = /\b(?:tag|(end))::(\S+)\[\]$/
+const TAG_DIRECTIVE_RX = /\b(?:tag|(e)nd)::(\S+?)\[\](?=$|[ \r])/m
 
 const IncludeProcessor = (() => {
   const $callback = Symbol('callback')
   const superclass = Opal.module(null, 'Asciidoctor').Extensions.IncludeProcessor
-  const scope = Opal.klass(
-    Opal.module(null, 'Antora', function $Antora () {}),
-    superclass,
-    'IncludeProcessor',
-    function () {}
-  )
+  const scope = Opal.klass(Opal.module(null, 'Antora', $Antora), superclass, 'IncludeProcessor', function () {})
 
   Opal.defn(scope, '$initialize', function initialize (callback) {
     Opal.send(this, Opal.find_super_dispatcher(this, 'initialize', initialize))
@@ -23,22 +20,69 @@ const IncludeProcessor = (() => {
   })
 
   Opal.defn(scope, '$process', function (doc, reader, target, attrs) {
-    const resolvedFile = this[$callback](doc, target, doc.getReader().getCursor())
-    if (resolvedFile) {
-      let includeContents = resolvedFile.contents
-      let startLineNum = 1
-      const tags = getTags(attrs)
-      if (tags) [includeContents, startLineNum] = applyTagFiltering(includeContents, tags)
-      Opal.hash_put(attrs, 'partial-option', true)
-      reader.pushInclude(includeContents, resolvedFile.file, resolvedFile.path, startLineNum, attrs)
-      if (resolvedFile.context) {
-        ;(reader.file = new String(reader.file)).context = resolvedFile.context // eslint-disable-line no-new-wrappers
+    if (reader.$include_depth() >= Opal.hash_get(reader.maxdepth, 'abs')) {
+      if (Opal.hash_get(reader.maxdepth, 'abs')) {
+        log('error', `maximum include depth of ${Opal.hash_get(reader.maxdepth, 'rel')} exceeded`, reader)
       }
+      return
+    }
+    const resolvedFile = this[$callback](doc, target, reader.$cursor_at_prev_line())
+    if (resolvedFile) {
+      let includeContents
+      let linenums
+      let tags
+      let startLineNum
+      if ((linenums = getLines(attrs))) {
+        ;[includeContents, startLineNum] = filterLinesByLineNumbers(reader, target, resolvedFile, linenums)
+      } else if ((tags = getTags(attrs))) {
+        ;[includeContents, startLineNum] = filterLinesByTags(reader, target, resolvedFile, tags)
+      } else {
+        includeContents = resolvedFile.contents
+        startLineNum = 1
+      }
+      Opal.hash_put(attrs, 'partial-option', '')
+      reader.pushInclude(includeContents, resolvedFile.file, resolvedFile.path, startLineNum, attrs)
+      ;(reader.file = new String(reader.file)).context = resolvedFile.context // eslint-disable-line no-new-wrappers
+    } else {
+      log('error', `include target not found: ${target}`, reader)
+      reader.$unshift(`Unresolved include directive in ${reader.$cursor_at_prev_line().file} - include::${target}[]`)
     }
   })
 
   return scope
 })()
+
+function getLines (attrs) {
+  if (attrs['$key?']('lines')) {
+    const lines = attrs['$[]']('lines')
+    if (lines) {
+      const linenums = []
+      let filtered
+      ;(~lines.indexOf(',') ? lines.split(',') : lines.split(';'))
+        .filter((it) => it)
+        .forEach((linedef) => {
+          filtered = true
+          let delim
+          let from
+          if (~(delim = linedef.indexOf('..'))) {
+            from = linedef.substr(0, delim)
+            let to = linedef.substr(delim + 2)
+            if ((to = parseInt(to) || -1) > 0) {
+              if ((from = parseInt(from) || -1) > 0) {
+                linenums.push(...Array.from({ length: to - from + 1 }, (_, i) => i + from))
+              }
+            } else if (to === -1 && (from = parseInt(from) || -1) > 0) {
+              linenums.push(from, Infinity)
+            }
+          } else if ((from = parseInt(linedef) || -1) > 0) {
+            linenums.push(from)
+          }
+        })
+      if (linenums.length) return [...new Set(linenums.sort((a, b) => a - b))]
+      if (filtered) return []
+    }
+  }
+}
 
 function getTags (attrs) {
   if (attrs['$key?']('tag')) {
@@ -49,9 +93,9 @@ function getTags (attrs) {
   } else if (attrs['$key?']('tags')) {
     const tags = attrs['$[]']('tags')
     if (tags) {
-      let result = new Map()
+      const result = new Map()
       let any = false
-      tags.split(TAG_DELIMITER_RX).forEach((tag) => {
+      tags.split(~tags.indexOf(',') ? ',' : ';').forEach((tag) => {
         if (tag && tag !== '!') {
           any = true
           tag.charAt() === '!' ? result.set(tag.substr(1), false) : result.set(tag, true)
@@ -62,7 +106,29 @@ function getTags (attrs) {
   }
 }
 
-function applyTagFiltering (contents, tags) {
+function filterLinesByLineNumbers (reader, target, file, linenums) {
+  let lineNum = 0
+  let startLineNum
+  let selectRest
+  const lines = []
+  file.contents.split(NEWLINE_RX).some((line) => {
+    lineNum++
+    if (selectRest || (selectRest = linenums[0] === Infinity)) {
+      if (!startLineNum) startLineNum = lineNum
+      lines.push(line)
+    } else {
+      if (linenums[0] === lineNum) {
+        if (!startLineNum) startLineNum = lineNum
+        linenums.shift()
+        lines.push(line)
+      }
+      if (!linenums.length) return true
+    }
+  })
+  return [lines, startLineNum || 1]
+}
+
+function filterLinesByTags (reader, target, file, tags) {
   let selecting, selectingDefault, wildcard
   if (tags.has('**')) {
     if (tags.has('*')) {
@@ -83,21 +149,14 @@ function applyTagFiltering (contents, tags) {
 
   const lines = []
   const tagStack = []
-  const usedTags = []
+  const foundTags = []
   let activeTag
   let lineNum = 0
   let startLineNum
-  contents.split(NEWLINE_RX).forEach((line) => {
+  file.contents.split(NEWLINE_RX).forEach((line) => {
     lineNum++
     let m
-    let l = line
-    if (
-      (l.endsWith('[]') ||
-        (~l.indexOf('[] ') &&
-          (m = l.match(CIRCUMFIX_COMMENT_SUFFIX_RX)) &&
-          (l = l.substr(0, m.index)).endsWith('[]'))) &&
-      (m = l.match(TAG_DIRECTIVE_RX))
-    ) {
+    if (~line.indexOf(DBL_COLON) && ~line.indexOf(DBL_SQUARE) && (m = line.match(TAG_DIRECTIVE_RX))) {
       const thisTag = m[2]
       if (m[1]) {
         if (thisTag === activeTag) {
@@ -107,30 +166,61 @@ function applyTagFiltering (contents, tags) {
           const idx = tagStack.findIndex(([name]) => name === thisTag)
           if (~idx) {
             tagStack.splice(idx, 1)
-            //console.warn(`line ${lineNum}: mismatched end tag in include: expected ${activeTag}, found ${thisTag}`)
+            log(
+              'warn',
+              `mismatched end tag (expected '${activeTag}' but found '${thisTag}') ` +
+                `at line ${lineNum} of include file: ${file.file})`,
+              reader,
+              reader.$create_include_cursor(file.file, target, lineNum)
+            )
+          } else {
+            log(
+              'warn',
+              `unexpected end tag '${thisTag}' at line ${lineNum} of include file: ${file.file}`,
+              reader,
+              reader.$create_include_cursor(file.file, target, lineNum)
+            )
           }
-          //} else {
-          //  //console.warn(`line ${lineNum}: unexpected end tag in include: ${thisTag}`)
-          //}
         }
       } else if (tags.has(thisTag)) {
-        usedTags.push(thisTag)
-        tagStack.unshift([(activeTag = thisTag), (selecting = tags.get(thisTag))])
+        foundTags.push(thisTag)
+        tagStack.unshift([(activeTag = thisTag), (selecting = tags.get(thisTag)), lineNum])
       } else if (wildcard !== undefined) {
         selecting = activeTag && !selecting ? false : wildcard
-        tagStack.unshift([(activeTag = thisTag), selecting])
+        tagStack.unshift([(activeTag = thisTag), selecting, lineNum])
       }
     } else if (selecting) {
       if (!startLineNum) startLineNum = lineNum
       lines.push(line)
     }
   })
-  // Q: use _.difference(Object.keys(tags), usedTags)?
-  //const missingTags = Object.keys(tags).filter((e) => !usedTags.includes(e))
-  //if (missingTags.length) {
-  //  console.warn(`tag${missingTags.length > 1 ? 's' : ''} '${missingTags.join(',')}' not found in include`)
-  //}
+  if (tagStack.length) {
+    tagStack.forEach(([tagName, _, tagLineNum]) =>
+      log(
+        'warn',
+        `detected unclosed tag '${tagName}' starting at line ${tagLineNum} of include file: ${file.file}`,
+        reader,
+        reader.$create_include_cursor(file.file, target, tagLineNum)
+      )
+    )
+  }
+  if (foundTags.length) foundTags.forEach((name) => tags.delete(name))
+  if (tags.size) {
+    const missingTagNames = Array.from(tags.keys())
+    log(
+      'warn',
+      `tag${tags.size > 1 ? 's' : ''} '${missingTagNames.join(', ')}' not found in include file: ${file.file}`,
+      reader
+    )
+  }
   return [lines, startLineNum || 1]
+}
+
+function log (severity, message, reader, includeCursor = undefined) {
+  const opts = includeCursor
+    ? { source_location: reader.$cursor_at_prev_line(), include_location: includeCursor }
+    : { source_location: reader.$cursor_at_prev_line() }
+  reader.$logger()['$' + severity](reader.$message_with_context(message, Opal.hash(opts)))
 }
 
 module.exports = IncludeProcessor
