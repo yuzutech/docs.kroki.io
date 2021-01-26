@@ -8,9 +8,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
     - name: Publish
-      uses: netlify/actions/build@master
+      run: curl -X POST -d {} $NETLIFY_WEBHOOK_URL
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        NETLIFY_WEBHOOK_URL: ${{ secrets.NETLIFY_WEBHOOK_URL }}
