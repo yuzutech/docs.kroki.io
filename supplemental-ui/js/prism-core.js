@@ -647,10 +647,23 @@ Prism.languages.request = {
 }
 Prism.languages.cli = {
   'keyword': /'[^']+'|"[^"]+"|text\/plain/i,
-  'operator': /-[a-zA-Z]+|[a-z_A-Z]+=|--[a-zA-Z\-]+|Content-Type/g,
+  'operator': [
+    {
+      pattern: /\s-[a-zA-Z]+(?=\s|$)/g
+    },
+    {
+      pattern: /(\s|^)[a-z_A-Z]+=/g
+    },
+    {
+      pattern: /--[a-zA-Z\-]+(?=\s|$)/g,
+    },
+    {
+      pattern: /Content-Type/g,
+    }
+   ],
   'host': /https:\/\/demo\.kroki\.io/,
   'normal': /(http)s?:\/\/[^\/]+/g,
-  'command': /http|curl|python|kroki/i
+  'command': /(?:^|\s)(http|curl|python|kroki|\/path\/to\/kroki|cat|echo|kubectl|unzip|wget)(?=\s)/g
 }
 Prism.languages['java-cli'] = {
   'operator': /-?[a-z_A-Z]+=|-jar/g,
