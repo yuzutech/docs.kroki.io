@@ -419,3 +419,16 @@ button.bd-copy > svg {
     -webkit-transform: translateX(50%);
     transform: translateX(50%)
 }
+
+.listingblock .listing-title {
+    color: #5d5d5d;
+    font-size: .88889rem;
+    font-weight: 500;
+    font-style: italic;
+    -webkit-hyphens: none;
+    -ms-hyphens: none;
+    hyphens: none;
+    letter-spacing: .01em;
+    padding-bottom: .075rem;
+    text-align: left;
+}
