@@ -432,3 +432,7 @@ button.bd-copy > svg {
     padding-bottom: .075rem;
     text-align: left;
 }
+
+.doc .listingblock:hover .source-toolbox {
+  visibility: hidden;
+}
