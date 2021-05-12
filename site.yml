@@ -7,7 +7,7 @@ site:
 content:
   sources:
   - url: https://github.com/yuzutech/kroki
-    branches: master
+    branches: main
     start_path: docs
 ui:
   bundle:
