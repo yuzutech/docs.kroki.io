@@ -5,6 +5,10 @@
   "authors": [
     "Guillaume Grossetie (https://github.com/mogztter)"
   ],
+  "private": true,
+  "engines": {
+    "node": ">=16"
+  },
   "description": "docs.kroki.io documentation site",
   "devDependencies": {
     "@antora/cli": "3.0",
