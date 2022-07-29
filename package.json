@@ -5,22 +5,14 @@
   "authors": [
     "Guillaume Grossetie (https://github.com/mogztter)"
   ],
-  "description": "docs.kroki.io documentation site",
-  "dependencies": {
-    "@antora/asciidoc-loader": "file:packages/asciidoc-loader",
-    "@antora/cli": "2.3.4",
-    "@antora/content-aggregator": "2.3.4",
-    "@antora/content-classifier": "2.3.4",
-    "@antora/document-converter": "2.3.4",
-    "@antora/navigation-builder": "2.3.4",
-    "@antora/page-composer": "2.3.4",
-    "@antora/playbook-builder": "2.3.4",
-    "@antora/redirect-producer": "2.3.4",
-    "@antora/site-mapper": "2.3.4",
-    "@antora/site-publisher": "2.3.4",
-    "@antora/ui-loader": "2.3.4"
+  "private": true,
+  "engines": {
+    "node": ">=16"
   },
+  "description": "docs.kroki.io documentation site",
   "devDependencies": {
+    "@antora/cli": "3.0",
+    "@antora/site-generator": "3.0",
     "clipboard": "^2.0.6"
   }
 }

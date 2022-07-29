@@ -18,7 +18,9 @@ asciidoc:
   attributes:
     hide-uri-scheme: ''
     icons: 'font'
+    source-highlighter: 'prism'
   extensions:
     - './lib/extensions/prism-line-highlight-tree-processor'
+    - './lib/extensions/prism-syntax-highlighter'
 output:
   dir: ./public
