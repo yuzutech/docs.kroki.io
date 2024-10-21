@@ -2,13 +2,17 @@ name: Site Indexer
 on:
   workflow_dispatch:
   repository_dispatch:
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     container: algolia/docsearch-scraper:v1.16.0
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Index
         env:
           APPLICATION_ID: ${{ secrets.ALGOLIA_APP_ID }}
